@@ -12,11 +12,39 @@ const routes = require('./routes');
 
 const app = express();
 
+// Behind a reverse proxy (nginx on OVH), trust the first hop so req.ip and the
+// rate limiter see the real client IP. Override with TRUST_PROXY (number of hops).
+const trustProxy = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? '1' : '0');
+app.set('trust proxy', Number(trustProxy));
+
+const configuredOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const localDevelopmentOrigins = process.env.NODE_ENV === 'production'
+    ? []
+    : [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
+        'http://127.0.0.1:3002',
+    ];
+const allowedOrigins = new Set([...configuredOrigins, ...localDevelopmentOrigins]);
+
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.has(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Origin not allowed by CORS'));
+    },
+}));
 app.use(helmet());
 app.use(pinoHttp({ logger }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 // Note: Multer handles multipart/form-data parsing, so urlencoded is not needed for file uploads
 
 // MongoDB connection

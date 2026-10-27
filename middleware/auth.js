@@ -23,6 +23,14 @@ const authenticateAdmin = async (req, res, next) => {
   }
 };
 
+const authorizeRoles = (...roles) => (req, res, next) => {
+  if (!req.admin || !roles.includes(req.admin.role)) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+  return next();
+};
+
 module.exports = {
   authenticateAdmin,
+  authorizeRoles,
 };

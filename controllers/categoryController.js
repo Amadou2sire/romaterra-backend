@@ -11,10 +11,10 @@ exports.getCategories = async (req, res) => {
 
 exports.createCategory = async (req, res) => {
     try {
-        const category = await Category.create(req.body);
+        const category = await Category.create({ name: req.body.name });
         res.status(201).json(category);
     } catch (err) {
-        res.status(400).json({ message: 'Failed to create collection' });
+        res.status(400).json({ message: 'Failed to create category' });
     }
 };
 
@@ -26,7 +26,7 @@ exports.updateCategory = async (req, res) => {
             });
         }
 
-        const category = await Category.findByIdAndUpdate(req.params.id, req.body, {
+        const category = await Category.findByIdAndUpdate(req.params.id, { name: req.body.name }, {
             new: true,
             runValidators: true,
         });
