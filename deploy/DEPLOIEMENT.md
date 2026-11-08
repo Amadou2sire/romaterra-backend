@@ -4,11 +4,11 @@ Architecture : un VPS Ubuntu 24.04 avec nginx + Node (pm2), base MongoDB Atlas.
 
 | Adresse | Contenu | Dossier sur le serveur |
 |---|---|---|
-| `romaterra.tn` / `www.romaterra.tn` | boutique (`romaterra-frontend`) | `/var/www/romaterra-shop` |
-| `admin.romaterra.tn` | dashboard (`romaterra-dashboard`) | `/var/www/romaterra-admin` |
-| `api.romaterra.tn` | backend (ce dépôt) | `/home/deploy/romaterra-backend` |
+| `artifact-ceramics.tn` / `www.artifact-ceramics.tn` | boutique (`romaterra-frontend`) | `/var/www/romaterra-shop` |
+| `admin.artifact-ceramics.tn` | dashboard (`romaterra-dashboard`) | `/var/www/romaterra-admin` |
+| `api.artifact-ceramics.tn` | backend (ce dépôt) | `/home/deploy/romaterra-backend` |
 
-Remplacer `romaterra.tn` partout si le domaine est différent.
+Remplacer `artifact-ceramics.tn` partout si le domaine est différent.
 
 ---
 
@@ -52,18 +52,18 @@ curl http://127.0.0.1:3000             # -> "Romaterra backend is running"
 ```
 
 Premier compte admin : mettre `ALLOW_ADMIN_REGISTER=true`, `pm2 restart romaterra-api`, créer le compte
-(`POST https://api.romaterra.tn/auth/register` avec `email` et `password`), puis remettre `false` et redémarrer.
+(`POST https://api.artifact-ceramics.tn/auth/register` avec `email` et `password`), puis remettre `false` et redémarrer.
 
 ## 5. Boutique et dashboard (compilés sur votre PC)
 
 Dans **`romaterra-frontend`**, créer `.env.production` :
 ```
-REACT_APP_API_URL=https://api.romaterra.tn
+REACT_APP_API_URL=https://api.artifact-ceramics.tn
 REACT_APP_META_PIXEL_ID=votre_id_pixel
 ```
 Dans **`romaterra-dashboard`**, créer `.env.production` :
 ```
-REACT_APP_API_URL=https://api.romaterra.tn
+REACT_APP_API_URL=https://api.artifact-ceramics.tn
 ```
 Puis dans chacun : `npm ci && npm run build`, et envoyer le dossier `build/` :
 ```bash
@@ -86,14 +86,14 @@ sudo nginx -t && sudo systemctl reload nginx
 Une fois que les DNS pointent bien vers le VPS :
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d romaterra.tn -d www.romaterra.tn -d admin.romaterra.tn -d api.romaterra.tn --redirect
+sudo certbot --nginx -d artifact-ceramics.tn -d www.artifact-ceramics.tn -d admin.artifact-ceramics.tn -d api.artifact-ceramics.tn --redirect
 ```
 Le renouvellement est automatique. Quand tout marche en HTTPS, ajouter dans chaque bloc `server` :
 `add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;`
 
 ## 8. Vérifications
 
-- [ ] `https://api.romaterra.tn` affiche « Romaterra backend is running ».
+- [ ] `https://api.artifact-ceramics.tn` affiche « Romaterra backend is running ».
 - [ ] La boutique charge les produits, une commande test passe, l'e-mail admin arrive.
 - [ ] Le dashboard se connecte ; annuler la commande test remet le stock.
 - [ ] Meta Pixel Helper (extension Chrome) voit PageView / AddToCart / Purchase.
