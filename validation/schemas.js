@@ -60,6 +60,17 @@ const shippingSchema = z.object({
   fee: z.coerce.number().min(0, 'Shipping fee must be zero or positive'),
 });
 
+// Banner links stay on the storefront: a site path, never an external URL.
+const bannerSlideSchema = z.object({
+  link: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^\/(?!\/)/, 'Link must be a path starting with /')
+    .optional()
+    .or(z.literal('')),
+});
+
 const customerLoyaltySchema = z.object({
   isLoyal: z.boolean(),
 });
@@ -73,5 +84,6 @@ module.exports = {
   orderStatusSchema,
   orderListQuerySchema,
   shippingSchema,
+  bannerSlideSchema,
   customerLoyaltySchema,
 };
