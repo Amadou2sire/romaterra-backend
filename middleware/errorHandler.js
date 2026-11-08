@@ -22,6 +22,11 @@ const errorHandler = (err, req, res, next) => {
     return next(err);
   }
 
+  // Upload errors (file too large, too many files...) are client errors.
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ message: `Upload rejected: ${err.code}` });
+  }
+
   return res.status(err.statusCode || 500).json({
     message: err.publicMessage || 'Internal server error',
   });

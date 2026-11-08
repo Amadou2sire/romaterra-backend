@@ -7,16 +7,16 @@ const {
     deleteProduct,
     updateProductStock,
 } = require('../controllers/productController');
-const { uploadMultiple } = require('../utils/cloudinary');
+const uploadUtils = require('../utils/uploadUtils');
+const uploadImages = uploadUtils.uploadImages;
 const { authenticateAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.get('/', getProducts);
 router.get('/:id', getProductById);
-router.post('/', uploadMultiple, createProduct);
-// router.post('/',authenticateAdmin, uploadMultiple, createProduct);
-router.put('/:id', authenticateAdmin, uploadMultiple, updateProduct);
+router.post('/', authenticateAdmin, uploadImages, createProduct);
+router.put('/:id', authenticateAdmin, uploadImages, updateProduct);
 router.delete('/:id', authenticateAdmin, deleteProduct);
 
 // Stock-specific route

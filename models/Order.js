@@ -15,11 +15,12 @@
             totalAmount: { type: Number, required: true, min: 0 },
             status: {
                 type: String,
-                enum: ['pending', 'paid', 'cancelled'],
+                enum: ['pending', 'confirmed', 'paid', 'cancelled'],
                 default: 'pending',
             },
             customerName: { type: String, trim: true, required: true },
             customerEmail: { type: String, trim: true, required: true },
+            customerPhone: { type: String, trim: true, required: true },
             shippingAddress: { type: String, trim: true, required: true },
         },
         { timestamps: true }

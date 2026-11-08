@@ -1,5 +1,49 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
-const { deleteImage } = require('../utils/cloudinary');
+const Category = require('../models/Category');
+const Collection = require('../models/Collection');
+const { deleteImage, uploadImageBuffer } = require('../utils/uploadUtils');
+
+// Convert a value that could be an ObjectId, an id string, or a name
+// into an ObjectId. Accepts either a valid 24-hex id or a name; if it looks
+// neither like a valid id nor a name, returns the original value (and the
+// Mongo cast will produce a clear error).
+const resolveRefId = async (Model, value) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'object' && value._id) return value._id;
+  const str = String(value);
+  if (mongoose.Types.ObjectId.isValid(str) && String(new mongoose.Types.ObjectId(str)) === str) {
+    return str;
+  }
+  // Treat as a name and look it up
+  const doc = await Model.findOne({ name: str }).select('_id');
+  if (!doc) {
+    const error = new Error(`Unknown ${Model.modelName} name: "${str}"`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return doc._id;
+};
+
+// Only these fields may be set from the request body; anything else
+// (_id, createdAt, Mongo operators...) is dropped.
+const PRODUCT_FIELDS = [
+  'name', 'description', 'price', 'promoPrice', 'quantityInStock',
+  'status', 'size', 'category', 'collection', 'images', 'replaceImages',
+];
+
+const pickProductFields = (body = {}) => {
+  const picked = {};
+  for (const field of PRODUCT_FIELDS) {
+    const value = body[field];
+    if (value === undefined) continue;
+    // Plain values only: rejects objects like { "$gt": "" } sent as JSON.
+    const isScalar = ['string', 'number', 'boolean'].includes(typeof value);
+    const isStringArray = field === 'images' && Array.isArray(value) && value.every((v) => typeof v === 'string');
+    if (isScalar || isStringArray) picked[field] = value;
+  }
+  return picked;
+};
 
 // Get all products
 exports.getProducts = async (req, res) => {
@@ -25,47 +69,44 @@ exports.getProductById = async (req, res) => {
 // Create product
 exports.createProduct = async (req, res) => {
   try {
-    // Extract image URLs from uploaded files
-    // When using multer.any(), req.files is an array
-    // Filter to only get files from the 'images' field
+    // Upload any new images to ImageKit
     const imageUrls = [];
     if (req.files && Array.isArray(req.files)) {
-      // Filter files from 'images' field only
-      const imageFiles = req.files.filter(file => file.fieldname === 'images');
-      if (imageFiles.length > 0) {
-        imageUrls.push(...imageFiles.map(file => file.path));
+      const imageFiles = req.files.filter((file) => file.fieldname === 'images');
+      for (const file of imageFiles) {
+        const imageUrl = await uploadImageBuffer(file.buffer, 'romaterra/products');
+        imageUrls.push(imageUrl);
       }
-    } else if (req.file) {
-      imageUrls.push(req.file.path);
     }
 
-    // Parse other fields from req.body
-    const body = req.body || {};
+    const { replaceImages, ...body } = pickProductFields(req.body);
+
+    // Resolve refs: accept either an ObjectId or a name for category/collection
+    const resolvedCategory = await resolveRefId(Category, body.category);
+    const resolvedCollection = await resolveRefId(Collection, body.collection);
 
     const productData = {
       ...body,
+      category: resolvedCategory,
+      collection: resolvedCollection,
       images: imageUrls.length > 0 ? imageUrls : (body.images || []),
     };
 
-    // Parse JSON fields if they're strings (common with multipart/form-data)
-    if (typeof productData.colors === 'string') {
-      try {
-        productData.colors = JSON.parse(productData.colors);
-      } catch (e) {
-        productData.colors = productData.colors.split(',').map(c => c.trim());
-      }
-    }
-    if (typeof productData.price === 'string') {
-      productData.price = parseFloat(productData.price);
+    // Coerce numeric fields that may arrive as strings from multipart/form-data
+    if (typeof productData.price === 'string') productData.price = parseFloat(productData.price);
+    if (productData.promoPrice !== undefined && productData.promoPrice !== '' &&
+        typeof productData.promoPrice === 'string') {
+      productData.promoPrice = parseFloat(productData.promoPrice);
     }
     if (typeof productData.quantityInStock === 'string') {
-      productData.quantityInStock = parseInt(productData.quantityInStock);
+      productData.quantityInStock = parseInt(productData.quantityInStock, 10);
     }
 
     const product = await Product.create(productData);
     res.status(201).json(product);
   } catch (err) {
-    res.status(400).json({ message: 'Failed to create product', error: err.message });
+    const status = err.statusCode || 400;
+    res.status(status).json({ message: 'Failed to create product', error: err.message });
   }
 };
 
@@ -75,44 +116,42 @@ exports.updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    // Handle new image uploads
-    // When using multer.any(), req.files is an array
-    // Filter to only get files from the 'images' field
+    // Upload any new images to ImageKit
     const newImageUrls = [];
     if (req.files && Array.isArray(req.files)) {
-      // Filter files from 'images' field only
-      const imageFiles = req.files.filter(file => file.fieldname === 'images');
-      if (imageFiles.length > 0) {
-        newImageUrls.push(...imageFiles.map(file => file.path));
+      const imageFiles = req.files.filter((file) => file.fieldname === 'images');
+      for (const file of imageFiles) {
+        const imageUrl = await uploadImageBuffer(file.buffer, 'romaterra/products');
+        newImageUrls.push(imageUrl);
       }
-    } else if (req.file) {
-      newImageUrls.push(req.file.path);
     }
 
-    // Update product data
-    const updateData = { ...req.body };
+    const { replaceImages, ...updateData } = pickProductFields(req.body);
 
-    // If new images uploaded, add them to existing images or replace
+    // Resolve refs if provided
+    if (updateData.category !== undefined) {
+      updateData.category = await resolveRefId(Category, updateData.category);
+    }
+    if (updateData.collection !== undefined) {
+      updateData.collection = await resolveRefId(Collection, updateData.collection);
+    }
+
+    // Merge / replace images when new ones are uploaded
     if (newImageUrls.length > 0) {
       const existingImages = product.images || [];
-      updateData.images = req.body.replaceImages === 'true'
+      updateData.images = String(replaceImages) === 'true'
         ? newImageUrls
         : [...existingImages, ...newImageUrls];
     }
 
-    // Parse JSON fields if needed
-    if (typeof updateData.colors === 'string') {
-      try {
-        updateData.colors = JSON.parse(updateData.colors);
-      } catch (e) {
-        updateData.colors = updateData.colors.split(',').map(c => c.trim());
-      }
-    }
-    if (typeof updateData.price === 'string') {
-      updateData.price = parseFloat(updateData.price);
+    // Coerce numeric fields when they arrive as strings
+    if (typeof updateData.price === 'string') updateData.price = parseFloat(updateData.price);
+    if (updateData.promoPrice !== undefined && updateData.promoPrice !== '' &&
+        typeof updateData.promoPrice === 'string') {
+      updateData.promoPrice = parseFloat(updateData.promoPrice);
     }
     if (typeof updateData.quantityInStock === 'string') {
-      updateData.quantityInStock = parseInt(updateData.quantityInStock);
+      updateData.quantityInStock = parseInt(updateData.quantityInStock, 10);
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateData, {
@@ -121,7 +160,8 @@ exports.updateProduct = async (req, res) => {
     });
     res.json(updatedProduct);
   } catch (err) {
-    res.status(400).json({ message: 'Failed to update product', error: err.message });
+    const status = err.statusCode || 400;
+    res.status(status).json({ message: 'Failed to update product', error: err.message });
   }
 };
 
@@ -131,16 +171,9 @@ exports.deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    // Delete images from Cloudinary
     if (product.images && product.images.length > 0) {
       for (const imageUrl of product.images) {
-        try {
-          // Extract public_id from Cloudinary URL
-          const publicId = imageUrl.split('/').slice(-2).join('/').split('.')[0];
-          await deleteImage(`romaterra/products/${publicId}`);
-        } catch (err) {
-          console.error('Error deleting image:', err);
-        }
+        await deleteImage(imageUrl).catch(() => null);
       }
     }
 
@@ -154,7 +187,10 @@ exports.deleteProduct = async (req, res) => {
 // Update stock quantity
 exports.updateProductStock = async (req, res) => {
   try {
-    const { quantityInStock } = req.body;
+    const quantityInStock = Number(req.body?.quantityInStock);
+    if (!Number.isInteger(quantityInStock) || quantityInStock < 0) {
+      return res.status(400).json({ message: 'quantityInStock must be a non-negative integer' });
+    }
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       { quantityInStock },
@@ -166,6 +202,3 @@ exports.updateProductStock = async (req, res) => {
     res.status(400).json({ message: 'Failed to update stock', error: err.message });
   }
 };
-
-
-

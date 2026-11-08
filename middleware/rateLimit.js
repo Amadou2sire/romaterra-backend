@@ -8,8 +8,8 @@ const authLimiter = rateLimit({
 });
 
 const checkoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
 });

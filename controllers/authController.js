@@ -27,6 +27,7 @@ const createRefreshToken = async (admin) => {
 
 exports.registerAdmin = async (req, res) => {
     try {
+        console.log('ALLOW_ADMIN_REGISTER:', process.env.ALLOW_ADMIN_REGISTER);
         if (process.env.ALLOW_ADMIN_REGISTER !== 'true') {
             return res.status(403).json({ message: 'Admin registration is disabled' });
         }
